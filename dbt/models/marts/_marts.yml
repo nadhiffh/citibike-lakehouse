@@ -1,0 +1,75 @@
+version: 2
+
+models:
+  - name: fct_trips
+    description: One row per trip. Retains all source rows; defects are flagged.
+    columns:
+      - name: ride_id
+        tests: [unique, not_null]
+      - name: start_station_key
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_station')
+                field: station_id
+      - name: end_station_key
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_station')
+                field: station_id
+      - name: rider_type
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["member", "casual"]
+      - name: bike_type
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["electric_bike", "classic_bike"]
+      - name: duration_seconds
+        tests: [not_null]
+
+  - name: dim_station
+    description: One row per station, derived from trip endpoints.
+    columns:
+      - name: station_id
+        tests: [unique, not_null]
+      - name: latitude
+        # Null only for the UNKNOWN sentinel member.
+        tests:
+          - not_null:
+              config:
+                where: "station_id != 'UNKNOWN'"
+      - name: longitude
+        tests:
+          - not_null:
+              config:
+                where: "station_id != 'UNKNOWN'"
+      - name: station_group
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["nyc", "jersey_city", "system", "unknown"]
+
+  - name: dim_date
+    description: One row per calendar date covered by the loaded partitions.
+    columns:
+      - name: date_day
+        tests: [unique, not_null]
+      - name: iso_day_of_week
+        tests:
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5, 6, 7]
+                quote: false
+
+  - name: agg_daily_station
+    description: One row per station per day.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [station_key, trip_date]
