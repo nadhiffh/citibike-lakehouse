@@ -1,0 +1,8 @@
+duckdb==1.5.5
+dbt-core==1.12.5
+dbt-duckdb==1.11.0
+dagster==1.13.23
+dagster-dbt==0.29.23
+dagster-webserver==1.13.23
+pandas==3.0.6
+pyarrow==25.0.1
