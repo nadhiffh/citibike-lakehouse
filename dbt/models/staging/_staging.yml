@@ -1,0 +1,52 @@
+version: 2
+
+models:
+  - name: stg_trips
+    description: >
+      Typed and lightly cleaned trips. No rows are dropped here; source defects
+      are exposed as boolean flags so downstream models decide what to exclude
+      and the defect rate stays measurable.
+    columns:
+      - name: ride_id
+        description: Source primary key.
+        tests: [unique, not_null]
+      - name: started_at
+        tests: [not_null]
+      - name: ended_at
+        tests: [not_null]
+      - name: duration_seconds
+        description: Derived from the timestamp pair, may be implausibly large.
+        tests: [not_null]
+      - name: rider_type
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["member", "casual"]
+      - name: bike_type
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["electric_bike", "classic_bike"]
+      - name: partition_month
+        description: YYYYMM tag written at ingest, matches the landing partition.
+        tests: [not_null]
+
+      # The flags are the contract the marts rely on, so they are tested too.
+      - name: is_missing_start_station
+        tests: [not_null]
+      - name: is_missing_end_station
+        tests: [not_null]
+      - name: is_implausible_duration
+        tests: [not_null]
+      - name: is_nonpositive_duration
+        tests: [not_null]
+
+  - name: int_station_observations
+    description: >
+      Station sightings unioned from both trip endpoints. Citi Bike publishes no
+      station feed, so the dimension is derived from trips.
+    columns:
+      - name: station_id
+        tests: [not_null]

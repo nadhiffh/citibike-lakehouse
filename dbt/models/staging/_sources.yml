@@ -1,0 +1,19 @@
+version: 2
+
+sources:
+  - name: landing
+    description: Parquet partitions written by the Dagster ingest asset.
+    tables:
+      - name: trips
+        description: One row per bike trip, as published, month-filtered.
+        meta:
+          # Absolute, so the parquet scan resolves no matter which directory
+          # the caller runs dbt from. dbt's `project_root` is not available in
+          # the Jinja context, and macros do not render inside source meta.
+          external_location: "{{ env_var('CITIBIKE_ROOT') }}/data/landing/month=*/trips.parquet"
+        columns:
+          - name: ride_id
+            description: Source primary key, 16-char hex.
+            tests:
+              - unique
+              - not_null

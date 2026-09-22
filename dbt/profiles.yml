@@ -1,0 +1,7 @@
+citibike:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: ../data/citibike.duckdb
+      threads: 4
