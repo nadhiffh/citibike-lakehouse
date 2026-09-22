@@ -1,0 +1,83 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs on the same branch to keep feedback fast.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    env:
+      CITIBIKE_ROOT: ${{ github.workspace }}
+      DBT_PROFILES_DIR: ${{ github.workspace }}/dbt
+      DAGSTER_HOME: ${{ github.workspace }}/.dagster
+      # One month is enough to exercise every model and test in CI.
+      MONTH: "2024-01"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Create environment
+        run: |
+          uv venv --python 3.12
+          uv pip install -r requirements.txt
+
+      - name: Cache the source archive
+        uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: citibike-raw-${{ env.MONTH }}
+
+      - name: Prepare Dagster home
+        run: mkdir -p .dagster && touch .dagster/dagster.yaml
+
+      - name: Install dbt packages
+        working-directory: dbt
+        run: ${{ github.workspace }}/.venv/bin/dbt deps
+
+      - name: Validate Dagster definitions
+        run: .venv/bin/dagster definitions validate -m pipeline.definitions
+
+      # The real test: ingest a month, build every model, run all data tests.
+      # A failing test fails the build, so bad data cannot reach main.
+      - name: Run pipeline end to end
+        run: |
+          .venv/bin/dagster asset materialize --select '*' \
+            --partition ${MONTH}-01 -m pipeline.definitions
+
+      - name: Verify reconciliation
+        run: |
+          .venv/bin/python - <<'PY'
+          import duckdb
+          con = duckdb.connect("data/citibike.duckdb", read_only=True)
+          fct = con.execute("select count(*) from main_marts.fct_trips").fetchone()[0]
+          src = con.execute(
+              "select count(*) from read_parquet('data/landing/month=*/trips.parquet')"
+          ).fetchone()[0]
+          print(f"fct_trips={fct:,} landed={src:,}")
+          assert fct == src, f"row count drift: {fct} != {src}"
+          assert fct > 0, "no rows built"
+          print("reconciliation OK")
+          PY
+
+      - name: Upload dbt artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-target
+          path: dbt/target/
+          retention-days: 7
