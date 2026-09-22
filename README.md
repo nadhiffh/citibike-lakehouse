@@ -4,7 +4,9 @@ Batch analytics pipeline over NYC Citi Bike trip data. Dagster orchestrates
 monthly ingestion into a DuckDB lakehouse; dbt builds a tested dimensional
 model on top.
 
-Verified on 2024-01 and 2024-02: 4,008,943 trips, 29 dbt tests passing.
+Verified on 2024-01 and 2024-02: 4,008,943 trips, 45 dbt tests passing.
+
+![ci](https://github.com/OWNER/citibike-lakehouse/actions/workflows/ci.yml/badge.svg)
 
 ## Architecture
 
@@ -68,9 +70,9 @@ Two findings that shaped the model:
 
 ## Tests
 
-29 tests run as part of `dbt build`, so a failure halts the graph before bad
+45 tests run as part of `dbt build`, so a failure halts the graph before bad
 data reaches the marts. Beyond the usual uniqueness, not-null, accepted-values
-and referential checks, three are worth calling out:
+and referential checks, four are worth calling out:
 
 - `assert_fct_trips_reconciles_to_source` — fact row count must equal the landed
   source count. Catches the most damaging silent failure in a batch pipeline: a
@@ -79,9 +81,29 @@ and referential checks, three are worth calling out:
   must sum back to the fact row count, guarding the full outer join.
 - `assert_dim_date_has_no_gaps` — the date spine must be contiguous and cover
   every trip date, so no day silently vanishes from a time series.
+- `assert_defect_flags_are_consistent` — each defect flag must agree with the
+  condition it claims to describe, so refactoring `stg_trips` cannot silently
+  invert one and quietly change what the marts mean.
 
 The reconciliation test was verified against a deliberately truncated fact
 table to confirm it actually fails on drift rather than passing vacuously.
+
+On top of the dbt tests, a **blocking Dagster asset check** validates each
+landed partition (non-empty, no off-month rows) before dbt reads it, so a
+corrupt partition halts the run instead of producing marts nobody can trust.
+
+CI runs the whole thing — ingest, build, all 45 tests, plus a reconciliation
+assertion — on every push and pull request.
+
+## Scheduling
+
+`monthly_refresh_schedule` runs at 06:00 America/New_York on the 5th of each
+month. Not the 1st: Citi Bike publishes a month's file during the first week of
+the following month, so a run on the 1st would reliably 404 on a file that does
+not exist yet.
+
+It ships with `default_status=STOPPED` so cloning the repo doesn't start doing
+work unasked. Enable it in the Dagster UI, or flip it to `RUNNING`.
 
 ## Setup
 
