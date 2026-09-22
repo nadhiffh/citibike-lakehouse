@@ -6,7 +6,7 @@ model on top.
 
 Verified on 2024-01 and 2024-02: 4,008,943 trips, 45 dbt tests passing.
 
-![ci](https://github.com/nadhifhafiz/citibike-lakehouse/actions/workflows/ci.yml/badge.svg)
+![ci](https://github.com/nadhiffh/citibike-lakehouse/actions/workflows/ci.yml/badge.svg)
 
 ## Architecture
 
