@@ -10,11 +10,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+from typing import Any, Mapping
+
 import duckdb
 from dagster import (
     AssetCheckExecutionContext,
     AssetCheckResult,
     AssetExecutionContext,
+    AssetKey,
     AssetSelection,
     DefaultScheduleStatus,
     Definitions,
@@ -24,7 +27,12 @@ from dagster import (
     asset_check,
     define_asset_job,
 )
-from dagster_dbt import DbtCliResource, DbtProject, dbt_assets
+from dagster_dbt import (
+    DagsterDbtTranslator,
+    DbtCliResource,
+    DbtProject,
+    dbt_assets,
+)
 
 from pipeline.ingest import LANDING_DIR
 from pipeline.ingest import run as run_ingest
@@ -117,7 +125,32 @@ def landed_partition_is_readable(
     )
 
 
-@dbt_assets(manifest=dbt_project.manifest_path)
+class CitibikeDbtTranslator(DagsterDbtTranslator):
+    """Map the dbt source `landing.trips` onto the `landed_trips` asset.
+
+    Without this the source becomes its own standalone asset with no edge to
+    the ingest step, so Dagster considers them independent and runs dbt
+    concurrently with (or before) ingestion. That passes locally whenever a
+    previous run left Parquet behind, and fails on a clean checkout with
+    "No files found that match ...". Pointing the source at the ingest asset
+    gives the graph a real dependency and a deterministic order.
+    """
+
+    def get_asset_key(self, dbt_resource_props: Mapping[str, Any]) -> AssetKey:
+        if (
+            dbt_resource_props["resource_type"] == "source"
+            and dbt_resource_props["source_name"] == "landing"
+            and dbt_resource_props["name"] == "trips"
+        ):
+            return landed_trips.key
+        return super().get_asset_key(dbt_resource_props)
+
+
+@dbt_assets(
+    manifest=dbt_project.manifest_path,
+    dagster_dbt_translator=CitibikeDbtTranslator(),
+    partitions_def=monthly,
+)
 def citibike_dbt_assets(context: AssetExecutionContext, dbt: DbtCliResource):
     """Staging, intermediate and mart models, plus their tests.
 
