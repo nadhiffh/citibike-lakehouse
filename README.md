@@ -4,7 +4,7 @@ Batch analytics pipeline over NYC Citi Bike trip data. Dagster orchestrates
 monthly ingestion into a DuckDB lakehouse; dbt builds a tested dimensional
 model on top.
 
-Verified on 2024-01 and 2024-02: 4,008,943 trips, 45 dbt tests passing.
+Verified on 2024-01 and 2024-02: 4,008,943 trips, 6 models and 39 data tests passing.
 
 ![ci](https://github.com/nadhiffh/citibike-lakehouse/actions/workflows/ci.yml/badge.svg)
 
@@ -70,7 +70,7 @@ Two findings that shaped the model:
 
 ## Tests
 
-45 tests run as part of `dbt build`, so a failure halts the graph before bad
+39 data tests run as part of `dbt build`, so a failure halts the graph before bad
 data reaches the marts. Beyond the usual uniqueness, not-null, accepted-values
 and referential checks, four are worth calling out:
 
@@ -92,7 +92,7 @@ On top of the dbt tests, a **blocking Dagster asset check** validates each
 landed partition (non-empty, no off-month rows) before dbt reads it, so a
 corrupt partition halts the run instead of producing marts nobody can trust.
 
-CI runs the whole thing — ingest, build, all 45 tests, plus a reconciliation
+CI runs the whole thing — ingest, build, all 39 data tests, plus a reconciliation
 assertion — on every push and pull request.
 
 ## Scheduling
